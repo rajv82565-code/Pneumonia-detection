@@ -37,7 +37,14 @@ def load_artifacts():
         model = tf.keras.models.load_model("cnn_model.keras")
         return ("keras", model, None, None, img_size, labels)
 
-    raise FileNotFoundError("Model not found. Expected `cnn_model.tflite` or `cnn_model.keras`.")
+    # Fallback to .h5 for local testing (not recommended for GitHub due to size)
+    if os.path.exists("cnn_model.h5"):
+        model = tf.keras.models.load_model("cnn_model.h5")
+        return ("keras", model, None, None, img_size, labels)
+
+    raise FileNotFoundError(
+        "Model not found. Expected `cnn_model.tflite` (recommended), `cnn_model.keras`, or `cnn_model.h5`."
+    )
 
 
 def preprocess_image(file_bytes: bytes, img_size: int):
@@ -78,7 +85,9 @@ def main():
     try:
         kind, obj, input_details, output_details, img_size, labels = load_artifacts()
     except FileNotFoundError:
-        st.error("Model not found. Put `cnn_model.tflite` (recommended) or `cnn_model.keras` next to `app.py`.")
+        st.error(
+            "Model not found. Put `cnn_model.tflite` (recommended), `cnn_model.keras`, or `cnn_model.h5` next to `app.py`."
+        )
         return
     except Exception as e:  # pragma: no cover - displayed to user
         st.error(f"Failed to load model: {e}")
