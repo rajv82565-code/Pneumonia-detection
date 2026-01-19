@@ -1,50 +1,51 @@
 """
 Streamlit app for Pneumonia Detection from Chest X-ray images.
 
-It loads the trained model from a small `cnn_model.tflite` (recommended) or
-falls back to `cnn_model.keras`, and predicts whether an uploaded image is
-NORMAL or PNEUMONIA.
+It loads the trained model from `cnn_model.pkl` (Keras JSON + weights) and
+predicts whether an uploaded image is NORMAL or PNEUMONIA.
 """
 
 import io
-from typing import Tuple
+import os
+import pickle
 
 import numpy as np
 import streamlit as st
 import tensorflow as tf
 from PIL import Image
-import os
+from tensorflow.keras.models import model_from_json
 
 
 @st.cache_resource(show_spinner=False)
 def load_artifacts():
     """
-    Load inference artifacts.
+    Load inference artifacts from cnn_model.pkl.
 
-    Prefer `cnn_model.tflite` (small, GitHub-friendly). Fallback to `cnn_model.keras`.
+    The pickle file should contain:
+      - model_json
+      - weights
+      - img_size
+      - labels
     """
-    img_size = 256
-    labels = ["NORMAL", "PNEUMONIA"]
+    if not os.path.exists("cnn_model.pkl"):
+        raise FileNotFoundError("cnn_model.pkl not found next to app.py")
 
-    if os.path.exists("cnn_model.tflite"):
-        interpreter = tf.lite.Interpreter(model_path="cnn_model.tflite")
-        interpreter.allocate_tensors()
-        input_details = interpreter.get_input_details()
-        output_details = interpreter.get_output_details()
-        return ("tflite", interpreter, input_details, output_details, img_size, labels)
+    with open("cnn_model.pkl", "rb") as f:
+        payload = pickle.load(f)
 
-    if os.path.exists("cnn_model.keras"):
-        model = tf.keras.models.load_model("cnn_model.keras")
-        return ("keras", model, None, None, img_size, labels)
+    model = model_from_json(payload["model_json"])
+    model.set_weights(payload["weights"])
 
-    # Fallback to .h5 for local testing (not recommended for GitHub due to size)
-    if os.path.exists("cnn_model.h5"):
-        model = tf.keras.models.load_model("cnn_model.h5")
-        return ("keras", model, None, None, img_size, labels)
-
-    raise FileNotFoundError(
-        "Model not found. Expected `cnn_model.tflite` (recommended), `cnn_model.keras`, or `cnn_model.h5`."
+    # Compile for predict/evaluate
+    model.compile(
+        loss="binary_crossentropy",
+        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+        metrics=["accuracy"],
     )
+
+    img_size = payload.get("img_size", 256)
+    labels = payload.get("labels", ["NORMAL", "PNEUMONIA"])
+    return model, img_size, labels
 
 
 def preprocess_image(file_bytes: bytes, img_size: int):
@@ -56,22 +57,10 @@ def preprocess_image(file_bytes: bytes, img_size: int):
     return tensor, img_resized
 
 
-def predict(image_tensor: np.ndarray, artifacts):
+def predict(image_tensor: np.ndarray, model):
     """Run inference and return probability of pneumonia."""
-    kind = artifacts[0]
-    if kind == "keras":
-        model = artifacts[1]
-        preds = model.predict(image_tensor)
-        return float(preds[0][0])
-
-    # TFLite
-    interpreter, input_details, output_details = artifacts[1], artifacts[2], artifacts[3]
-    input_index = input_details[0]["index"]
-    output_index = output_details[0]["index"]
-    interpreter.set_tensor(input_index, image_tensor.astype(np.float32))
-    interpreter.invoke()
-    output = interpreter.get_tensor(output_index)
-    return float(output[0][0])
+    preds = model.predict(image_tensor)
+    return float(preds[0][0])
 
 
 def main():
@@ -83,11 +72,10 @@ def main():
     )
 
     try:
-        kind, obj, input_details, output_details, img_size, labels = load_artifacts()
+        model, img_size, labels = load_artifacts()
     except FileNotFoundError:
-        st.error(
-            "Model not found. Put `cnn_model.tflite` (recommended), `cnn_model.keras`, or `cnn_model.h5` next to `app.py`."
-        )
+        st.error("Model file `cnn_model.pkl` not found next to `app.py`.")
+        st.info("Train the model in the notebook and ensure `cnn_model.pkl` is copied here.")
         return
     except Exception as e:  # pragma: no cover - displayed to user
         st.error(f"Failed to load model: {e}")
@@ -109,8 +97,7 @@ def main():
 
         if st.button("Predict"):
             with st.spinner("Running inference..."):
-                artifacts = (kind, obj, input_details, output_details)
-                prob_pneumonia = predict(image_tensor, artifacts)
+                prob_pneumonia = predict(image_tensor, model)
                 prob_normal = 1.0 - prob_pneumonia
                 pred_idx = int(prob_pneumonia > 0.5)
                 pred_label = labels[pred_idx] if pred_idx < len(labels) else "PNEUMONIA"

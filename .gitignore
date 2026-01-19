@@ -1,0 +1,11 @@
+tfenv/
+.venv/
+venv/
+__pycache__/
+.ipynb_checkpoints/
+
+# Big model/dataset artifacts (do not commit)
+chest_xray/
+*.h5
+*.keras
+

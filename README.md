@@ -1,21 +1,19 @@
 ## Pneumonia Detection (Streamlit)
 
-### What to upload to GitHub
+### Files you should keep
 
-GitHub blocks large files via the web UI (25MB). To avoid this, **export the model as TFLite** and upload the smaller file:
+- `pneumonia detection.ipynb` – trains the CNN and **saves `cnn_model.pkl`**
+- `cnn_model.pkl` – pickled payload containing model JSON + weights + metadata
+- `app.py` – Streamlit UI that loads `cnn_model.pkl`
+- `requirements.txt` – Python dependencies
 
-- `cnn_model.tflite` (recommended, small)
-- `app.py`
-- `requirements.txt`
+### How to generate `cnn_model.pkl`
 
-### Export the smaller model
+In `pneumonia detection.ipynb`:
 
-In `pneumonia detection.ipynb`, run the training cell. It will create:
-
-- `cnn_model.keras`
-- `cnn_model.tflite` (float16 quantized; usually much smaller)
-
-Upload **`cnn_model.tflite`** to GitHub.
+1. Make sure the `chest_xray/` dataset is available in the project folder.
+2. Run the main training cell. At the end it will create:
+   - `cnn_model.pkl`
 
 ### Run locally
 
@@ -24,11 +22,8 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-### Deploy on Streamlit Cloud
+### Uploading to GitHub
 
-- Push the repo to GitHub (include `cnn_model.tflite`)
-- On Streamlit Cloud, choose:
-  - **Main file path**: `app.py`
-
-
+`cnn_model.pkl` is larger than 25MB, so upload it using **git push**, not the GitHub web upload.
+Only keep the small code files and `cnn_model.pkl` in the repository.
 
